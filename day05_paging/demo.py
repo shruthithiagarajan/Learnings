@@ -8,7 +8,7 @@ print("issues:", len(issues), "pages fetched:", pages)
 for i in issues[:3]:
     print(i["number"], i["state"], i["updated_at"], i["title"][:60])
 
-req = urllib.request.Request("https://github.com")
+req = urllib.request.Request("https://api.github.com/rate_limit")
 with urllib.request.urlopen(req) as r:
     print("rate limit headers:")
     for k, v in r.headers.items():

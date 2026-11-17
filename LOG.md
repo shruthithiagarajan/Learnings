@@ -489,11 +489,11 @@ _To do_
 | Task | Status |
 |---|---|
 | Read GitHub REST docs: Using pagination, Rate limits | To do |
-| With curl, list issues of a public repo (for example `psf/requests`, `state=all&per_page=5`); with `curl -i` find the rate-limit headers and the Link header | To do |
-| Add `since=2026-09-01T00:00:00Z`: what changed? | To do |
+| With curl, list issues of a public repo (for example `psf/requests`, `state=all&per_page=5`); with `curl -i` find the rate-limit headers and the Link header | Done: see "Terminal commands and output" |
+| Add `since=2026-09-01T00:00:00Z`: what changed? | Done: same first page here; `since` carried into the next link |
 | Write a Python function (httpx or requests) that fetches all pages for a `since` date, follows the Link header, and retries with a growing wait on 429 or 5xx | Done, standard library only: `day05_paging/github_issues.py` |
-| Run the function for one week of issues; show pages fetched and rate-limit headers | Done: 16 issues in 6 pages; rate-limit headers not shown (see below) |
-| Write tests for the paging logic by hand, using a fake response | Done: 5 tests pass |
+| Run the function for one week of issues; show pages fetched and rate-limit headers | Done: 16 issues in 6 pages; headers shown after fixing the URL in `demo.py` |
+| Write tests for the paging logic by hand, using a fake response | Done: 5 passed in 0.04s |
 
 **Demo:** Run the function for one week of issues; show how many pages it fetched and the rate-limit headers.
 
@@ -524,14 +524,96 @@ rate limit headers:
 | Issue numbers 7650, 7649, 7648 | The endpoint sorts by created date, newest first (the default), so the numbers go down. |
 | `updated_at` is not in order (11-16, 11-16, 11-17) | `since` filters by **updated** time but the sort is by **created** time, so an older issue that was updated recently still appears. |
 | All three `open` | `state=all` asks for open and closed, and the three newest happen to be open. |
-| Empty "rate limit headers" | The script requested `https://github.com` (the website), which does not send `x-ratelimit-*` headers. Those headers come on API responses (`api.github.com`). To show them, read them from an issues response (`curl.exe -i ...` or `fetch` returns headers), or call `https://api.github.com/rate_limit`. This part of the demo still has to be redone. |
+| Empty "rate limit headers" | The script requested `https://github.com` (the website), which does not send `x-ratelimit-*` headers. Those headers come on API responses (`api.github.com`). Fixed: `demo.py` now calls `https://api.github.com/rate_limit`; the rerun is below. |
 
 Note that this endpoint also returns pull requests (items with a `pull_request` key), so "issues"
 here can include PRs.
 
-Status: the paging, the Link-header loop and the retry code are demonstrated by this run and by
-the 5 unit tests. Not recorded yet: the two curl steps (headers from `curl.exe -i`, and what
-changed when adding `since`), a rate-limit header printout, and my own pytest output.
+### Terminal commands and output (2026-11-17, about 12:39 GMT)
+
+Run in this repo, in PowerShell, through Claude Code. Output is copied as printed; for the curl
+runs only the status line and the headers that matter are kept (the JSON body is left out).
+
+**1. List issues with `curl.exe -i` (no `since`)**
+
+```powershell
+curl.exe -i "https://api.github.com/repos/psf/requests/issues?state=all&per_page=5"
+```
+```http
+HTTP/1.1 200 OK
+Date: Tue, 17 Nov 2026 12:39:02 GMT
+Content-Type: application/json; charset=utf-8
+Link: <https://api.github.com/repositories/1362490/issues?state=all&per_page=5&after=Y3Vyc29yOnYyOpLPAAABodgm1RDPAAAAAXyO3fA%3D&page=2>; rel="next"
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 53
+X-RateLimit-Used: 7
+X-RateLimit-Resource: core
+X-RateLimit-Reset: 1794922683
+```
+Body: issues 7650, 7649, 7648, 7647, 7646.
+
+**2. Same request with `since=2026-09-01T00:00:00Z`**
+
+```powershell
+curl.exe -i "https://api.github.com/repos/psf/requests/issues?state=all&per_page=5&since=2026-09-01T00:00:00Z"
+```
+```http
+HTTP/1.1 200 OK
+Date: Tue, 17 Nov 2026 12:39:03 GMT
+Content-Type: application/json; charset=utf-8
+Link: <https://api.github.com/repositories/1362490/issues?state=all&per_page=5&since=2026-09-01T00%3A00%3A00Z&after=Y3Vyc29yOnYyOpLPAAABodgm1RDPAAAAAXyO3fA%3D&page=2>; rel="next"
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 52
+X-RateLimit-Used: 8
+X-RateLimit-Resource: core
+X-RateLimit-Reset: 1794922683
+```
+Body: the same issues, 7650 to 7646.
+
+| What changed with `since` | Explanation |
+|---|---|
+| First page is the same | All five newest issues were updated after 2026-09-01, so the filter removes none of them. The difference shows on later pages, where older issues not updated since September drop out. |
+| `since=...` is now inside the Link URL | The next-page link keeps every filter, so following `rel="next"` keeps the same query. The code only has to follow the link and never rebuild the URL. |
+| `page=2` plus an `after=` cursor | GitHub pages this endpoint with a cursor. That is another reason to follow the Link header rather than counting pages. |
+| Remaining 53 then 52, Used 7 then 8 | Each call costs one from the 60-per-hour limit for calls without a token. `X-RateLimit-Reset` is a Unix time (seconds) when the count resets. |
+
+**3. Unit tests**
+
+```powershell
+cd day05_paging
+uv run --no-project --python ..\.venv\Scripts\python.exe --with pytest python -m pytest -q
+```
+```
+.....                                                                    [100%]
+5 passed in 0.04s
+```
+pytest is not installed in `.venv` (`No module named pytest`), so `uv run --with pytest` adds it
+in a temporary environment. To use plain `python -m pytest -q`, install it once:
+`$env:VIRTUAL_ENV="$PWD\..\.venv"; uv pip install pytest`.
+
+**4. Demo with rate-limit headers (after the `demo.py` fix)**
+
+```powershell
+..\.venv\Scripts\python.exe demo.py
+```
+```
+issues: 16 pages fetched: 6
+7650 open 2026-11-16T06:57:05Z Add test coverage for SHA-1 Digest authentication and query
+7649 open 2026-11-16T20:32:35Z [Bug] RequestsCookieJar — multiple_domains() returns incorre
+7648 open 2026-11-17T06:12:06Z HTTPDigestAuth fails to select auth when qop contains a comm
+rate limit headers:
+  X-RateLimit-Limit 60
+  X-RateLimit-Remaining 46
+  X-RateLimit-Used 14
+  X-RateLimit-Resource core
+  X-RateLimit-Reset 1794922683
+```
+Remaining went from 52 to 46: the 6 page requests each cost one call. The `/rate_limit` call
+itself does not count against the limit.
+
+Status: all hands-on steps are recorded: the paging, Link-header loop and retry code (demo run
+plus 5 unit tests), both curl runs, and the rate-limit headers. Still to do: reading the GitHub
+docs, the 3 surprises, and the open question.
 
 ### What I learned (study notes)
 
@@ -614,8 +696,7 @@ land in the terminal history. Reading the result:
 ### Study notes status
 
 The study notes are done. The explanations of the three explain-back questions are drafts to
-re-read. Hands-on results still to record are listed in the "Status" line above (curl runs, the
-rate-limit header printout, my own pytest run).
+re-read. The hands-on results are now recorded in "Terminal commands and output" above.
 
 ### 3 surprises
 
