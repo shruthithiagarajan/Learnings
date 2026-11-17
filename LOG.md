@@ -482,7 +482,7 @@ _To do_
 
 ---
 
-## Day 5: HTTP and APIs (date)
+## Day 5: HTTP and APIs (2026-11-17)
 
 ### Checklist
 
@@ -492,6 +492,7 @@ _To do_
 | With curl, list issues of a public repo (for example `psf/requests`, `state=all&per_page=5`); with `curl -i` find the rate-limit headers and the Link header | To do |
 | Add `since=2026-09-01T00:00:00Z`: what changed? | To do |
 | Write a Python function (httpx or requests) that fetches all pages for a `since` date, follows the Link header, and retries with a growing wait on 429 or 5xx | Done, standard library only: `day05_paging/github_issues.py` |
+| Run the function for one week of issues; show pages fetched and rate-limit headers | Done: 16 issues in 6 pages; rate-limit headers not shown (see below) |
 | Write tests for the paging logic by hand, using a fake response | Done: 5 tests pass |
 
 **Demo:** Run the function for one week of issues; show how many pages it fetched and the rate-limit headers.
@@ -504,8 +505,33 @@ value) and fails straight away on 401/403/404; `fetch_issues_since(repo, since)`
 there is no next link. The HTTP call is injected so tests use fake responses. The token comes
 from `GITHUB_TOKEN`, never from code. `test_github_issues.py`: **5 passed**.
 
-Not done here: the curl steps and a live run for one week of issues (the shell cannot reach
-api.github.com); run `python -c` against a real repo from your own terminal for the demo.
+### Demo run (`day05_paging/demo.py`)
+
+I ran the function for one week of `psf/requests` issues: `since=2026-11-10T00:00:00Z`, `per_page=3`,
+on 2026-11-17. Output:
+
+```
+issues: 16 pages fetched: 6
+7650 open 2026-11-16T06:57:05Z Add test coverage for SHA-1 Digest authentication and query
+7649 open 2026-11-16T20:32:35Z [Bug] RequestsCookieJar - multiple_domains() returns incorre
+7648 open 2026-11-17T06:12:06Z HTTPDigestAuth fails to select auth when qop contains a comm
+rate limit headers:
+```
+
+| What the output shows | Explanation |
+|---|---|
+| `issues: 16`, `pages fetched: 6` | With 3 per page, 16 issues need 6 pages: five full pages of 3 and a last page with 1. The loop stopped because the last response had no `rel="next"` link. |
+| Issue numbers 7650, 7649, 7648 | The endpoint sorts by created date, newest first (the default), so the numbers go down. |
+| `updated_at` is not in order (11-16, 11-16, 11-17) | `since` filters by **updated** time but the sort is by **created** time, so an older issue that was updated recently still appears. |
+| All three `open` | `state=all` asks for open and closed, and the three newest happen to be open. |
+| Empty "rate limit headers" | The script requested `https://github.com` (the website), which does not send `x-ratelimit-*` headers. Those headers come on API responses (`api.github.com`). To show them, read them from an issues response (`curl.exe -i ...` or `fetch` returns headers), or call `https://api.github.com/rate_limit`. This part of the demo still has to be redone. |
+
+Note that this endpoint also returns pull requests (items with a `pull_request` key), so "issues"
+here can include PRs.
+
+Status: the paging, the Link-header loop and the retry code are demonstrated by this run and by
+the 5 unit tests. Not recorded yet: the two curl steps (headers from `curl.exe -i`, and what
+changed when adding `since`), a rate-limit header printout, and my own pytest output.
 
 ### What I learned
 
