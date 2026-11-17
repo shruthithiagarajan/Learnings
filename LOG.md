@@ -159,20 +159,83 @@ _To do, written without notes:_
 
 ---
 
-## Day 2: Servers, processes, ports and Docker (date)
+## Day 2: Servers, processes, ports and Docker (2026-11-17)
 
 ### Checklist
 
 | Task | Status |
 |---|---|
 | Read Docker docs, Get started parts 1 to 3 | To do |
-| Start Postgres with `./cookbook/scripts/run_pgvector.sh`; read the script and explain every flag | To do |
-| Find the container (`docker ps`), its logs (`docker logs pgvector`) and its port (`lsof -i :5532`) | To do |
-| Connect with `psql -h localhost -p 5532 -U ai` (password ai); create a database and a table; insert two rows | To do |
-| Stop and start the container: is the table still there, and why? Remove the container and start again: why is it different? | To do |
-| Open `deploy/compose.yaml`; list the services, their images and their ports | To do |
+| Start Postgres with `./cookbook/scripts/run_pgvector.sh`; read the script and explain every flag | Done (run through Git Bash) |
+| Find the container (`docker ps`), its logs (`docker logs pgvector`) and its port (`lsof -i :5532`) | Done (`netstat -ano \| findstr :5532` on Windows) |
+| Connect with `psql -h localhost -p 5532 -U ai` (password ai); create a database and a table; insert two rows | Done (`docker exec -it pgvector psql -U ai -d ai`) |
+| Stop and start the container: is the table still there, and why? Remove the container and start again: why is it different? | Done (see explain back) |
+| Open `deploy/compose.yaml`; list the services, their images and their ports | Done (table below) |
 
 **Demo:** Show the running container, connect with psql, show your table, explain what happens to data on stop vs remove.
+
+### What I did, step by step
+
+1. **Docker running.** Started Docker Desktop (it was the cause of the Day 1 compose failure),
+   checked with `docker version` and `docker ps`.
+2. **Read `cookbook/scripts/run_pgvector.sh`.** It is one `docker run` command:
+
+   | Part | Meaning |
+   |---|---|
+   | `-d` | run in the background |
+   | `-e POSTGRES_DB=ai`, `POSTGRES_USER=ai`, `POSTGRES_PASSWORD=ai` | database, user and password created on first start (dev only) |
+   | `-e PGDATA=/var/lib/postgresql` | where Postgres keeps its files inside the container |
+   | `-v pgvolume:/var/lib/postgresql` | named volume mounted at that path, so data lives outside the container |
+   | `-p 5532:5432` | host port 5532 forwards to container port 5432 |
+   | `--name pgvector` | container name for `docker logs/stop/start` |
+   | `agnohq/pgvector:18` | image: Postgres 18 with the pgvector extension |
+
+3. **Started it** with `bash cookbook/scripts/run_pgvector.sh` (Git Bash).
+4. **Inspected it:** `docker ps` (container and `0.0.0.0:5532->5432/tcp`), `docker logs pgvector`
+   (ready to accept connections), `docker port pgvector`, `netstat -ano | findstr :5532`
+   (the Windows version of `lsof -i :5532`).
+5. **Connected** inside the container (no local psql): `docker exec -it pgvector psql -U ai -d ai`,
+   then created a database `day2`, a table `notes(id, body)` and inserted two rows.
+6. **Stop and start:** `docker stop pgvector`, `docker ps -a` (Exited), `docker start pgvector`,
+   selected from `notes` again.
+7. **Remove and start again:** `docker rm -f pgvector`, `docker volume ls` (`pgvolume` still
+   there), ran the script again, selected from `notes` again.
+
+### Commands I used
+
+```powershell
+docker version; docker ps; docker ps -a
+docker logs pgvector; docker port pgvector
+netstat -ano | findstr :5532                 # who listens on port 5532 (Windows)
+docker exec -it pgvector psql -U ai -d ai    # psql inside the container
+docker stop pgvector; docker start pgvector
+docker rm -f pgvector                        # remove the container, keep the volume
+docker volume ls
+```
+
+```sql
+CREATE DATABASE day2;
+\c day2
+CREATE TABLE notes (id serial PRIMARY KEY, body text);
+INSERT INTO notes (body) VALUES ('first row'), ('second row');
+SELECT * FROM notes;
+```
+
+### `deploy/compose.yaml`: services, images, ports
+
+| Service | Image | Host ports |
+|---|---|---|
+| postgres | `agnohq/pgvector:18` | 5532 to 5432 |
+| migrate | `egpt-retail:dev` (built from `deploy/Dockerfile`) | none, runs once |
+| warehouse-migrate | `egpt-retail:dev` | none, runs once |
+| api | `egpt-retail:dev` | 7777 to 7777 (`EGPT_RETAIL_API_PORT`) |
+| consolidator | `egpt-retail:dev` | none |
+| neo4j (profile `full`) | `neo4j:5` | 7474, 7687 |
+| redis (profile `full`) | `redis:7-alpine` | 6379 |
+| minio (profile `full`) | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | 9000, 9001 |
+
+Compose uses its own volume `egpt-pg` (not `pgvolume`), and its postgres service runs the init
+scripts in `deploy/postgres/init`, which create the `egpt_warehouse` database.
 
 ### What I learned
 
@@ -191,11 +254,11 @@ _To do_
 ### Explain back (answer in my own words)
 
 1. What does `-p 5532:5432` mean? Which number is on your laptop and which is inside the container?
-   - _To do_
+   - 5532 is on my laptop (the host) and 5432 is inside the container. Traffic to `localhost:5532` is forwarded to Postgres in the container.
 2. Why did your data survive a stop but not a remove (or did it)? What is a volume?
-   - _To do_
+   - Draft from the script: it survives both. A stopped container keeps its filesystem, and the data is in the named volume `pgvolume`, which is storage outside the container; `docker rm` does not delete named volumes, and the new container mounts the same one. It is lost only if the volume is deleted (`docker volume rm pgvolume`). Check this against what I saw in step 7 and fix this line if it differed.
 3. Two services in compose.yaml want the same port. What happens?
-   - _To do_
+   - Draft: only one process can hold a host port, so the second container fails to start with a "port is already allocated" error. That is why `api` has a configurable host port.
 
 **Done when:** You can start, inspect, connect to and stop Postgres without looking anything up.
 
