@@ -533,9 +533,89 @@ Status: the paging, the Link-header loop and the retry code are demonstrated by 
 the 5 unit tests. Not recorded yet: the two curl steps (headers from `curl.exe -i`, and what
 changed when adding `since`), a rate-limit header printout, and my own pytest output.
 
-### What I learned
+### What I learned (study notes)
 
-_To do, in my own words._
+**curl.** `curl` sends an HTTP request from the terminal and shows the response, like a browser
+without a screen. It is quick for testing an API without writing a script, and it shows raw
+headers (status, `Link`, `X-RateLimit-*`) that a browser hides.
+
+| Flag | Name | What it does |
+|---|---|---|
+| `-i` | include | print the response headers and the body |
+| `-I` | head | send a HEAD request, print only the headers |
+| `-H` | header | send a custom header, e.g. `-H "Authorization: Bearer <token>"` |
+| `-X` | request | choose the method (GET, POST, DELETE); GET is the default |
+
+In Windows PowerShell, `curl` is a shortcut for `Invoke-WebRequest`, which behaves differently
+and fails on flags like `-i`. Typing `curl.exe` runs the real curl (`C:\Windows\System32\curl.exe`).
+
+**What an API looks like.** An API is a structured way for one program to ask another for data
+or actions over HTTP. Instead of a web page it returns structured text, usually JSON. Every call
+has a request and a response.
+
+```http
+GET https://api.example.com/weather?city=Bengaluru&units=metric HTTP/1.1
+Authorization: Bearer <token>
+Accept: application/json
+```
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-RateLimit-Remaining: 99
+
+{"city": "Bengaluru", "temperature_c": 24.5, "condition": "Partly Cloudy", "humidity_percent": 68}
+```
+
+- Request: the method (`GET` reads, `POST` creates), the URL with query parameters (the filters),
+  and headers (who I am, what format I want).
+- Response: the status line (`200 OK`), headers (metadata such as `Content-Type` and the rate-limit
+  counters), and the JSON body that the code parses with `response.json()`.
+
+**Testing error handling (401, 429, 500) without running the app.**
+
+1. *Real status codes with curl.* A test service such as httpbin returns whatever status is in the
+   URL (my note had lost the paths, the corrected commands are):
+   ```powershell
+   curl.exe -I "https://httpbin.org/status/401"   # unauthorized
+   curl.exe -I "https://httpbin.org/status/429"   # too many requests
+   curl.exe -I "https://httpbin.org/status/500"   # server error
+   curl.exe -I -H "Authorization: Bearer fake_invalid_token" "https://api.github.com/user"   # real 401 from GitHub
+   ```
+2. *A fake `fetch` in the unit test (best practice).* My `fetch_issues_since(..., fetch=http_fetch)`
+   takes the HTTP call as a parameter (dependency injection), so a test passes a fake that returns
+   429 first and 200 next. It runs in milliseconds with no internet and no waiting on real rate
+   limits. That is what `test_github_issues.py` does with a scripted list of responses.
+3. *If the code calls a library directly:* `httpx.MockTransport(handler)` for httpx, or
+   `unittest.mock.patch` (or the `responses` / `respx` libraries) for requests and urllib.
+
+**Checking an API key on its own.** Test the key with one small request instead of running the
+whole app. With the key in `.env` (never in code or git), either use `curl.exe` against
+`https://api.anthropic.com/v1/messages` with the headers `x-api-key`, `anthropic-version` and
+`content-type: application/json` and a tiny body (`max_tokens` 10, one short user message), or run
+a short Python script that reads the key from the environment (loaded from `.env`) so it does not
+land in the terminal history. Reading the result:
+
+| Result | Meaning |
+|---|---|
+| 200 with an assistant reply | key is valid and the account can make requests |
+| 401 `authentication_error` | typo, extra spaces or quotes in `.env`, or a revoked key |
+| 400 about the credit balance | key is valid but the account needs credits |
+| 429 | key works but the rate limit was hit |
+
+### Corrections I made when writing these notes up
+
+| In my study notes | Fixed here | Why |
+|---|---|---|
+| `curl.exe -I "https://httpbin.org"` listed three times for 401, 429 and 500 | `.../status/401`, `/status/429`, `/status/500` | The status code goes in the URL path; without it all three are the same request |
+| `https://github.com` used to test GitHub rate-limit headers and a fake token | `https://api.github.com/...` | github.com is the website; the API and its `X-RateLimit-*` headers are on api.github.com (same cause as the empty header list in my demo run) |
+| `https://anthropic.com` for the key test | `https://api.anthropic.com/v1/messages` | The Messages API lives on `api.anthropic.com`; the model name in the request should be whatever the project is configured to use |
+| Example `fake_fetch(url, headers=None)` returns `(200, {}, [ {...} ])` | A fake must return the same shape as `http_fetch`: `(status, headers, body_text)`, and the body is a JSON **string** (`json.dumps([...])`) | `fetch_issues_since` calls `json.loads(body)`, so a Python list as the body would fail |
+
+### Study notes status
+
+The study notes are done. The explanations of the three explain-back questions are drafts to
+re-read. Hands-on results still to record are listed in the "Status" line above (curl runs, the
+rate-limit header printout, my own pytest run).
 
 ### 3 surprises
 
