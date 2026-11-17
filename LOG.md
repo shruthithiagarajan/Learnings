@@ -151,20 +151,20 @@ _To do, written without notes:_
 
 ---
 
-
 ## Day 2: Servers, processes, ports and Docker (date)
-
 
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read Docker docs (Get started, parts 1 to 3) | To do |
-| Run `./cookbook/scripts/run_pgvector.sh` and document every flag in it | To do |
-| Inspect the container (`docker ps`), logs (`docker logs pgvector`), port (`lsof -i :5532`) | To do |
-| Connect with `psql -h localhost -p 5532 -U ai`, create a DB and table, insert 2 rows | To do |
-| Stop and restart the container, check the data persists; remove it and restart, note the difference | To do |
-| Inspect `deploy/compose.yaml`: list services, images and port mappings | To do |
+| Read Docker docs, Get started parts 1 to 3 | To do |
+| Start Postgres with `./cookbook/scripts/run_pgvector.sh`; read the script and explain every flag | To do |
+| Find the container (`docker ps`), its logs (`docker logs pgvector`) and its port (`lsof -i :5532`) | To do |
+| Connect with `psql -h localhost -p 5532 -U ai` (password ai); create a database and a table; insert two rows | To do |
+| Stop and start the container: is the table still there, and why? Remove the container and start again: why is it different? | To do |
+| Open `deploy/compose.yaml`; list the services, their images and their ports | To do |
+
+**Demo:** Show the running container, connect with psql, show your table, explain what happens to data on stop vs remove.
 
 ### What I learned
 
@@ -180,23 +180,32 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain `-p 5532:5432`, volumes, stop vs remove, and port conflicts._
+1. What does `-p 5532:5432` mean? Which number is on your laptop and which is inside the container?
+   - _To do_
+2. Why did your data survive a stop but not a remove (or did it)? What is a volume?
+   - _To do_
+3. Two services in compose.yaml want the same port. What happens?
+   - _To do_
 
+**Done when:** You can start, inspect, connect to and stop Postgres without looking anything up.
+
+---
 
 ## Day 3: PostgreSQL basics (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read Postgres docs (Tutorial, chapters 2 and 3) | To do |
-| Create `deals` and `dealers` tables | To do |
-| Insert 15 to 20 rows by hand (some NULL amounts, one deal with no dealer) | To do |
-| Queries: deals per stage, total per brand, deals with no dealer (LEFT JOIN), average ignoring NULLs, top 3 brands | To do |
-| Run a change inside BEGIN; ... ROLLBACK; and confirm nothing persisted | To do |
+| Read Postgres docs, Tutorial chapters 2 and 3 | To do |
+| Create `deals(deal_id, stage, amount, created_at, brand)` and `dealers(dealer_id, name, region)`, plus a `dealer_id` on deals | To do |
+| Insert 15 to 20 rows by hand, with some NULL amounts and one deal with no dealer | To do |
+| Queries: deals per stage; total amount per brand; deals with no dealer (left join); average amount ignoring NULLs; top 3 brands by amount | To do |
+| Run one query inside a transaction, then ROLLBACK, and show nothing changed | To do |
+
+**Demo:** Run each query and explain its result.
 
 ### What I learned
 
@@ -212,23 +221,32 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain LEFT vs INNER JOIN, NULLs in AVG, and an index on `created_at`._
+1. Why does the left join return the deal without a dealer, and the inner join does not?
+   - _To do_
+2. How does AVG treat NULL? How would you count NULLs as zero instead?
+   - _To do_
+3. What would an index on `created_at` help with?
+   - _To do_
 
+**Done when:** Every query is written by you and explained.
 
-## Day 4: JSON in Postgres and latest row per key (date)
+---
 
+## Day 4: JSON in Postgres, and latest row per key (date)
 
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read Postgres docs (Window Functions, section 3.5) | To do |
-| Create synthetic `deals.ndjson` with duplicate versions and multi-line quotes | To do |
-| Load into `raw_deals(payload jsonb)` | To do |
-| Queries: row count vs distinct deals, latest stage per deal with ROW_NUMBER(), deal value at latest version, distinct Closed Won deals | To do |
-| Run the deliberately wrong Closed Won count and write down why the numbers differ | To do |
+| Read Postgres docs, Window Functions tutorial (3.5) | To do |
+| Write `deals.ndjson` by hand with made-up data: the same deal several times with different `last_modified`, and one quote as three rows (one per product line) | To do |
+| Load it into `raw_deals(payload jsonb)` with `\copy` or a small Python script you write | To do |
+| Query: how many rows? how many distinct deals? latest stage per deal (window function)? value of each deal at its latest version (sum of price x qty over its lines)? how many deals are Closed Won? | To do |
+| Answer it wrongly on purpose (count Closed Won rows) and write down why the numbers differ | To do |
+
+**Demo:** Show the file, the raw table, and the right and wrong answers side by side.
 
 ### What I learned
 
@@ -244,23 +262,32 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Compare right vs wrong output; walk through the window function and tie-breaking on `last_modified`._
+1. Walk through your window-function query clause by clause.
+   - _To do_
+2. Why is counting rows wrong here? Give two different reasons rows repeat.
+   - _To do_
+3. If two versions of a deal have exactly the same `last_modified`, which one does your query pick? Is that safe?
+   - _To do_
 
+**Done when:** You can write the latest-per-key query from memory and explain why it is needed.
+
+---
 
 ## Day 5: HTTP and APIs (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read GitHub REST docs (pagination, rate limits) | To do |
-| `curl -i` and inspect the rate-limit and `Link` headers | To do |
-| Try the `since` parameter and note what changes | To do |
-| Python function that follows `Link` pages and backs off on 429 and 5xx | To do |
-| Hand-written unit tests for the pagination logic using fake responses | To do |
+| Read GitHub REST docs: Using pagination, Rate limits | To do |
+| With curl, list issues of a public repo (for example `psf/requests`, `state=all&per_page=5`); with `curl -i` find the rate-limit headers and the Link header | To do |
+| Add `since=2026-09-01T00:00:00Z`: what changed? | To do |
+| Write a Python function (httpx or requests) that fetches all pages for a `since` date, follows the Link header, and retries with a growing wait on 429 or 5xx | To do |
+| Write tests for the paging logic by hand, using a fake response | To do |
+
+**Demo:** Run the function for one week of issues; show how many pages it fetched and the rate-limit headers.
 
 ### What I learned
 
@@ -276,27 +303,33 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain 429 vs 401, how pagination is detected, and what `since` does._
+1. What does a 429 mean and what should a client do? What about 401?
+   - _To do_
+2. How does your code know there is another page?
+   - _To do_
+3. Why is `since` useful when you pull the same source every day?
+   - _To do_
 
+**Done when:** Your function and its tests are your own and you can explain the retry logic.
 
-### Week 1 checkpoint
+> **Week 1 check:** short SQL test on the Day 4 data, and a 15-minute explain-back of two days chosen by the reviewer.
 
-_To do: SQL test on the Day 4 data, then a 15-minute explain-back of two chosen days._
-
+---
 
 ## Day 6: How EnterpriseGPT is built (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read CLAUDE.md, CONTRIBUTING.md, ARCHITECTURE.md and the model provider's prompt guide | To do |
-| One-sentence summary per top-level folder | To do |
-| Find the file and function in `libs/agno/egpt/agent/` where messages go to the model | To do |
-| Draw the end-to-end data flow, marking where models run and where they never run | To do |
+| Read CLAUDE.md, CONTRIBUTING.md and ARCHITECTURE.md, and the prompt engineering guide of your model provider | To do |
+| One sentence for each folder: `libs/agno/egpt`, `product/egpt_retail`, `frontend`, `cookbook`, `deploy`, `scripts` | To do |
+| In `libs/agno/egpt/agent/`, find where an agent sends its messages to the model; write down the file and function | To do |
+| Draw the data flow on one page in your own words; mark where a model runs and where it must not | To do |
+
+**Demo:** Present your folder map and drawing in 10 minutes.
 
 ### What I learned
 
@@ -312,23 +345,32 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: 10-minute walkthrough: framework vs product, tokens, deterministic KPIs._
+1. What belongs in `libs/agno/egpt/` and what in `product/`? Why keep them apart?
+   - _To do_
+2. What is a token, and why does a long conversation cost more?
+   - _To do_
+3. Why must a KPI number never come from a model's answer?
+   - _To do_
 
+**Done when:** You can find your way around the repository and explain the flow without notes.
+
+---
 
 ## Day 7: Your first agent (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read the quickstart and agents READMEs and the Pydantic Models docs | To do |
-| Set up `.env` with the mentor-provided key (never commit it); run the two structured-output examples | To do |
-| Turn on debug output; read the message trace and token usage | To do |
-| Build an agent that returns a typed deal summary via `output_schema` | To do |
-| Hand-written tests for Pydantic parsing with fixed mock responses (no live LLM) | To do |
+| Read `cookbook/00_quickstart/README.md`, `cookbook/02_agents/README.md` and the Pydantic Models docs | To do |
+| Set up the quickstart; run `agent_with_structured_output.py` and `agent_with_typed_input_output.py` (switch the model class if your key is for another provider; note what else changed). Key goes in `.env`, never in code | To do |
+| Turn on debug output and read one full run: messages sent, model response, tokens used | To do |
+| Write your own agent that takes one Day 4 deal as JSON and returns a typed summary (deal id, latest stage, value, one-line note) through `output_schema` | To do |
+| Test parsing and validation by hand with a fixed made-up response; tests never call the model | To do |
+
+**Demo:** Run your agent on three deals and walk through one debug trace.
 
 ### What I learned
 
@@ -344,24 +386,32 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain `output_schema`, `.env` security, and why tests mock the model._
+1. What does `output_schema` change in what the model is asked to do? What happens if the model returns something invalid?
+   - _To do_
+2. Where does your key come from at run time? Why not in the code?
+   - _To do_
+3. Why should tests not call the model?
+   - _To do_
 
+**Done when:** Your agent and its tests are your own and you can explain the trace.
+
+---
 
 ## Day 8: Tools: letting the agent act (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read `agent_with_tools.py` and `cookbook/02_agents/04_tools/` | To do |
-| Create a read-only Postgres user | To do |
-| Build a `@tool` `run_sql(query)` allowing one SELECT and capping rows | To do |
-| Attach it to an agent with the `raw_deals` schema; ask for Closed Won count and open deal value | To do |
-| Tune instructions until it dedupes and matches the Day 4 SQL | To do |
-| Hand-written tests for the guard (reject DELETE, reject multiple statements, allow SELECT) | To do |
+| Read `cookbook/00_quickstart/agent_with_tools.py` and `cookbook/02_agents/04_tools/` | To do |
+| Write a `run_sql(query)` tool over your Day 4 data: one SELECT only, refuses anything else, caps rows; connect as a read-only database user you create | To do |
+| Give it to an agent whose instructions describe `raw_deals`; ask: how many deals are Closed Won? what is the total value of open deals? | To do |
+| Compare with your Day 4 answers; if it counts rows instead of deals, change the instructions or tool description and record what worked | To do |
+| Tests by hand for the guard: a DELETE, two statements in one string, an allowed SELECT | To do |
+
+**Demo:** Show the tool calls in the trace, the right answer, and the guard refusing a write.
 
 ### What I learned
 
@@ -377,23 +427,32 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain defense in depth: DB user plus code guard._
+1. Walk through one tool call: who decides to call it, who runs it, and what does the model see?
+   - _To do_
+2. Why a read-only database user as well as your guard?
+   - _To do_
+3. The agent gave a wrong number. How do you find out why?
+   - _To do_
 
+**Done when:** The agent answers both questions correctly from the tool, and the guard tests pass.
+
+---
 
 ## Day 9: Knowledge and memory (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read the knowledge getting-started and memory cookbooks | To do |
-| Run basic and agentic RAG on pgvector; note chunk counts and retrieved chunks | To do |
-| Write a Markdown glossary of 8 to 10 terms and load it as knowledge | To do |
-| Ask questions that need both the glossary and the SQL tool | To do |
-| Persist session history and check recall across restarts | To do |
+| Read `cookbook/07_knowledge/01_getting_started/` (`01_basic_rag.py`, `02_agentic_rag.py`), `cookbook/00_quickstart/agent_with_memory.py`, `agent_with_storage.py` and `cookbook/11_memory/01_agent_with_memory.py` | To do |
+| Run basic and agentic RAG against the project's pgvector with the embedder your mentor names; note chunks stored and chunks retrieved for one question | To do |
+| Write a markdown glossary of 8 to 10 definitions for your deals data (open, won, deal value...) and load it as knowledge for your Day 8 agent | To do |
+| Ask questions that need both a definition and the data; check the agent uses the definition | To do |
+| Add storage so a conversation survives a restart; show a second session remembers the first | To do |
+
+**Demo:** Show a question answered from the glossary and the data, with the retrieved chunks.
 
 ### What I learned
 
@@ -409,22 +468,31 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain embeddings, chunk size, and knowledge vs memory vs instructions._
+1. What is an embedding? What does chunk size change?
+   - _To do_
+2. When should a fact go in knowledge, in memory, or in the instructions?
+   - _To do_
+3. The agent answered from the glossary, but the glossary was wrong. How would you catch that?
+   - _To do_
 
+**Done when:** Your agent uses the glossary correctly and you can explain what was retrieved and why.
 
-## Day 10: Teams, workflows and human-in-the-loop (date)
+---
 
+## Day 10: Teams, workflows and a person in the loop (date)
 
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read the multi-agent team, sequential workflow and human-in-the-loop examples | To do |
-| Build a 2-step workflow: SQL/knowledge agent, then a writer agent for a weekly note | To do |
-| Add a human approval gate before saving the note | To do |
-| Run the same task as a Team; compare cost, step count and control | To do |
+| Read `cookbook/00_quickstart/multi_agent_team.py`, `sequential_workflow.py`, `human_in_the_loop.py` and `cookbook/04_workflows/01_basic_workflows/` | To do |
+| Build a two-step workflow: step 1 your Day 8 agent answers a question; step 2 a writer agent turns it into a short weekly note | To do |
+| Add an approval: the note is saved to a file only after a person approves it | To do |
+| Run the same question through a team; note what changed in cost, number of steps and control | To do |
+
+**Demo:** Run the workflow, approve once and reject once.
 
 ### What I learned
 
@@ -440,27 +508,34 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Show approve and reject paths; workflow vs team; why agents are not created in loops._
+1. Why is a workflow easier to test than a team?
+   - _To do_
+2. Where did you put the approval, and what happens when it is rejected?
+   - _To do_
+3. Why is creating an agent inside a loop a problem?
+   - _To do_
 
+**Done when:** The workflow runs, the approval works both ways, and you can explain the trade-off with a team.
 
-### Week 2 checkpoint
+> **Week 2 check:** 20-minute explain-back of Day 8 to 10 code, and a short quiz on tools, retrieval and memory.
 
-_To do: 20-minute explain-back of Days 8 to 10 and a short quiz on tools, retrieval and memory._
-
+---
 
 ## Day 11: Data in: contracts, raw and clean (date)
 
-
 ### Checklist
 
 | Task | Status |
 |---|---|
-| Read LANDING_CONTRACT.md and LOAD_CONTRACT.md | To do |
+| Read `LANDING_CONTRACT.md` and `LOAD_CONTRACT.md`; learn watermarks and append-only storage | To do |
 | Start Postgres: `docker compose -f deploy/compose.yaml up -d postgres` | To do |
-| Run `cookbook/94_retail/C01_landing_contract.py` | To do |
-| Run `cookbook/94_retail/R04_landing_to_silver.py` with `EGPT_RETAIL_WAREHOUSE_DB_URL` set | To do |
+| Run `.venv/bin/python cookbook/94_retail/C01_landing_contract.py` | To do |
+| Run `R04_landing_to_silver.py` with `EGPT_RETAIL_WAREHOUSE_DB_URL=postgresql+psycopg://ai:ai@localhost:5532/egpt_warehouse` | To do |
+| Pick one fixture record; find it in its file under `contracts/_fixtures/landing/`, in `landing.raw_row`, and in its silver table; find the SQL file in `warehouse/sql/conform/` that moved it | To do |
+
+**Demo:** Show the same record in all three places and the SQL that moved it.
 
 ### What I learned
 
@@ -476,7 +551,136 @@ _To do, in my own words._
 
 _To do_
 
-### Explain back
+### Explain back (answer in my own words)
 
-_To do. Prepare: Explain raw vs landing vs silver and the last-write-wins rule._
+1. What happens if the same file is loaded twice? Show where the code prevents duplicates.
+   - _To do_
+2. What is a defect in this pipeline, and what happens to a bad row?
+   - _To do_
+3. Why must a watermark move only after the write succeeds?
+   - _To do_
+
+**Done when:** You can trace a record without help.
+
+---
+
+## Day 12: Meaning: the semantic layer and KPIs (date)
+
+### Checklist
+
+| Task | Status |
+|---|---|
+| Read Neo4j Getting started with Cypher, `docs/plan/domain-knowledge-layers.md` and `cookbook/94_retail/README.md` | To do |
+| Run `K03_ontology.py`, `K04_metadata_harvest.py`, `K05_semantic_graph.py`, then `K11_kpi_registry_and_feasibility.py` (see each file's header for what it needs; use `.venvs/demo`) | To do |
+| In the Neo4j browser write three Cypher queries over what K05 wrote: list the entities; show the attributes of one; show how two entities join | To do |
+| For one KPI from K11 write down its formula, the entities it uses, and why it is feasible or not | To do |
+
+**Demo:** Show your three queries and explain your KPI.
+
+### What I learned
+
+_To do, in my own words._
+
+### 3 surprises
+
+1. _To do_
+2. _To do_
+3. _To do_
+
+### 1 open question
+
+_To do_
+
+### Explain back (answer in my own words)
+
+1. What does the semantic layer know that the clean tables do not?
+   - _To do_
+2. What makes a KPI not feasible?
+   - _To do_
+3. Why does an agent suggest KPIs but never compute them?
+   - _To do_
+
+**Done when:** You can explain the path from a clean table to a KPI on a dashboard.
+
+---
+
+## Day 13: Quality and how we ship (date)
+
+### Checklist
+
+| Task | Status |
+|---|---|
+| Read `cookbook/09_evals/README.md`, `accuracy/accuracy_with_given_answer.py`, `accuracy/accuracy_with_tools.py`; the PR template; `cookbook/08_learning/`; `deploy/Dockerfile`, `deploy/compose.yaml`, overview of `deploy/AZURE_CUTOVER.md` | To do |
+| Write an evaluation set of 10 questions with expected answers over your deals data; run it against your Day 8 and 9 agent with an accuracy eval; record the score | To do |
+| Open a practice PR from your learning branch using the template; `./scripts/format.sh` and `./scripts/validate.sh` must pass; your buddy reviews it | To do |
+
+**Demo:** Show the eval results and your PR with its review.
+
+### What I learned
+
+_To do, in my own words._
+
+### 3 surprises
+
+1. _To do_
+2. _To do_
+3. _To do_
+
+### 1 open question
+
+_To do_
+
+### Explain back (answer in my own words)
+
+1. Your eval scored 7 out of 10. What do you look at first?
+   - _To do_
+2. Why does an agent acting as judge need its own checks?
+   - _To do_
+3. What does `validate.sh` catch that your tests do not?
+   - _To do_
+
+**Done when:** Your eval runs and you can explain each failure; your PR passes format and validate.
+
+---
+
+## Days 14 and 15: Capstone, ask your data (date)
+
+### Checklist
+
+| Task | Status |
+|---|---|
+| Pull: reuse the Day 5 function to pull issues of one public repo changed since a watermark; write each pull as an NDJSON file, refusing to overwrite an existing name; store the watermark in Postgres and advance it only after the file is written | To do |
+| Raw and clean: load files into `raw.github_issue` (file path, line number, pulled at, record key, payload jsonb); loading the same file twice inserts nothing; create view `clean.issue` with one row per issue, latest version, typed columns | To do |
+| Checks: one row per issue in clean; distinct raw keys equal clean rows; no issue closed before it was created; make one fail on purpose with a bad record | To do |
+| KPIs in SQL, no model: issues closed per week and median days to close, last 8 weeks | To do |
+| Agent: read-only SQL tool over `clean` plus a knowledge base of the KPI definitions; every number must come from the tool | To do |
+| Evaluation: 10 questions with expected answers; run it and report the score | To do |
+| README and TEST_LOG in the cookbook style | To do |
+
+**Demo:** 30 minutes live, end to end: pull, files, raw, clean, checks, KPIs, agent, evaluation; then questions on any line. Learning log: what I know now that I did not three weeks ago.
+
+### What I learned
+
+_To do, in my own words._
+
+### 3 surprises
+
+1. _To do_
+2. _To do_
+3. _To do_
+
+### 1 open question
+
+_To do_
+
+### Explain back (answer in my own words)
+
+1. How does your load stay safe to re-run?
+   - _To do_
+2. Why does the KPI need the clean layer? What would change if an issue were reopened?
+   - _To do_
+3. Show one question the agent got wrong and explain why.
+   - _To do_
+
+**Done when:** A second run pulls only new or changed issues; the load re-runs without duplicates; the checks fail on bad data; the agent's numbers come from the tool; the evaluation score is reported and explained.
 
