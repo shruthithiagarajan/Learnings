@@ -16,7 +16,7 @@ framework and the Enterprise GPT retail product).
 | Activate `.venv` | Done (`.venv\Scripts\Activate.ps1`) |
 | Run `pytest product/tests/test_landing_contract.py -q` | Done: **57 passed** in 0.22s |
 | Create branch `learning/<name>`, add LOG.md, commit, push | Changed: push to the org repo returned 403, so the log lives in this repo instead |
-| 20-line word-count script + two pytest tests | To do |
+| 20-line word-count script + two pytest tests | Done: 2 tests pass (`day01_word_count/`) |
 | Demo | To do |
 | Explain back: three questions | To do |
 
@@ -139,7 +139,14 @@ environment variables in the terminal that starts it.
 
 ### Word-count script and tests
 
-_To do: `word_count.py`, `test_word_count.py`, and what each test checks._
+Files: `day01_word_count/word_count.py` (`count_lines_with_word(path, word)`, case-insensitive,
+counts lines not occurrences, rejects an empty word) and `day01_word_count/test_word_count.py`.
+Result: **2 passed**.
+
+| Test | What it proves | Bug it would catch |
+|---|---|---|
+| `test_counts_each_line_once_even_if_word_repeats` | A line with the word twice counts once, and the match ignores case | Counting occurrences instead of lines; missing `ERROR` vs `error` |
+| `test_empty_file_and_empty_word` | Empty file gives 0; empty word raises `ValueError` | `""` matching every line and inflating the count |
 
 ### Explain back (in my own words)
 
@@ -148,6 +155,7 @@ _To do, written without notes:_
 1. What is a virtual environment, and why does this project use one?
 2. What is the difference between `git merge` and `git rebase`?
 3. What does each of my two tests prove, and what bug would each one catch?
+   - See the table in "Word-count script and tests" above.
 
 ---
 
@@ -241,12 +249,29 @@ _To do_
 | Task | Status |
 |---|---|
 | Read Postgres docs, Window Functions tutorial (3.5) | To do |
-| Write `deals.ndjson` by hand with made-up data: the same deal several times with different `last_modified`, and one quote as three rows (one per product line) | To do |
-| Load it into `raw_deals(payload jsonb)` with `\copy` or a small Python script you write | To do |
-| Query: how many rows? how many distinct deals? latest stage per deal (window function)? value of each deal at its latest version (sum of price x qty over its lines)? how many deals are Closed Won? | To do |
-| Answer it wrongly on purpose (count Closed Won rows) and write down why the numbers differ | To do |
+| Write `deals.ndjson` by hand with made-up data: the same deal several times with different `last_modified`, and one quote as three rows (one per product line) | Written, see `day04_latest_per_key/` (not yet run on Postgres) |
+| Load it into `raw_deals(payload jsonb)` with `\copy` or a small Python script you write | Written, see `day04_latest_per_key/` (not yet run on Postgres) |
+| Query: how many rows? how many distinct deals? latest stage per deal (window function)? value of each deal at its latest version (sum of price x qty over its lines)? how many deals are Closed Won? | Written, see `day04_latest_per_key/` (not yet run on Postgres) |
+| Answer it wrongly on purpose (count Closed Won rows) and write down why the numbers differ | Written, see `day04_latest_per_key/` (not yet run on Postgres) |
 
 **Demo:** Show the file, the raw table, and the right and wrong answers side by side.
+
+### Code and results
+
+Files in `day04_latest_per_key/`: `deals.ndjson` (12 made-up lines, 4 deals), `queries.sql`
+(Postgres: `raw_deals`, row and deal counts, latest stage with `ROW_NUMBER`, deal value with
+`DENSE_RANK`, right and wrong Closed Won count), `reference.py` (same answers in plain Python),
+`test_reference.py` (**5 passed**, including the window query run on sqlite).
+
+| Question | Right answer |
+|---|---|
+| Rows / distinct deals | 12 / 4 |
+| Latest stage | D-1001 Closed Won, D-1002 Quotation, D-1003 Closed Won, D-1004 Closed Lost |
+| Deal value at latest version | D-1001 7800, D-1002 9000, D-1003 15000, D-1004 9600 |
+| Deals Closed Won (right) vs Closed Won rows (wrong) | 2 vs 4 |
+
+The `queries.sql` file has not been run on a real Postgres here (no Postgres in this
+environment); the same logic is checked by the Python reference and by the sqlite test.
 
 ### What I learned
 
@@ -267,9 +292,9 @@ _To do_
 1. Walk through your window-function query clause by clause.
    - _To do_
 2. Why is counting rows wrong here? Give two different reasons rows repeat.
-   - _To do_
+   - Draft from my data: (a) a deal is sent again each time it changes (D-1001 appears at Quotation and again at Closed Won); (b) one version has several product lines (D-1001 has two lines per version). Counting Closed Won rows gives 4, the real number of deals is 2.
 3. If two versions of a deal have exactly the same `last_modified`, which one does your query pick? Is that safe?
-   - _To do_
+   - Draft: the one with the higher `id` (loaded later), because of `ORDER BY ... , id DESC` (D-1004 shows this: Closed Lost wins). It is deterministic but only safe if load order means "newer"; a stricter rule needs another version field.
 
 **Done when:** You can write the latest-per-key query from memory and explain why it is needed.
 
@@ -284,10 +309,21 @@ _To do_
 | Read GitHub REST docs: Using pagination, Rate limits | To do |
 | With curl, list issues of a public repo (for example `psf/requests`, `state=all&per_page=5`); with `curl -i` find the rate-limit headers and the Link header | To do |
 | Add `since=2026-09-01T00:00:00Z`: what changed? | To do |
-| Write a Python function (httpx or requests) that fetches all pages for a `since` date, follows the Link header, and retries with a growing wait on 429 or 5xx | To do |
-| Write tests for the paging logic by hand, using a fake response | To do |
+| Write a Python function (httpx or requests) that fetches all pages for a `since` date, follows the Link header, and retries with a growing wait on 429 or 5xx | Done, standard library only: `day05_paging/github_issues.py` |
+| Write tests for the paging logic by hand, using a fake response | Done: 5 tests pass |
 
 **Demo:** Run the function for one week of issues; show how many pages it fetched and the rate-limit headers.
+
+### Code and results
+
+`day05_paging/github_issues.py`: `next_url` reads `rel="next"` from the Link header;
+`get_with_retry` retries 429 and 5xx with waits of 1, 2, 4 ... seconds (or the `Retry-After`
+value) and fails straight away on 401/403/404; `fetch_issues_since(repo, since)` loops until
+there is no next link. The HTTP call is injected so tests use fake responses. The token comes
+from `GITHUB_TOKEN`, never from code. `test_github_issues.py`: **5 passed**.
+
+Not done here: the curl steps and a live run for one week of issues (the shell cannot reach
+api.github.com); run `python -c` against a real repo from your own terminal for the demo.
 
 ### What I learned
 
@@ -306,11 +342,11 @@ _To do_
 ### Explain back (answer in my own words)
 
 1. What does a 429 mean and what should a client do? What about 401?
-   - _To do_
+   - Draft: 429 = too many requests; wait (the `Retry-After` value or a growing delay) and retry. 401 = not authenticated; retrying cannot help, so fix the token. My code retries 429/5xx and raises on 401.
 2. How does your code know there is another page?
-   - _To do_
+   - The response has a `Link` header with a `rel="next"` URL; when it is missing, that was the last page.
 3. Why is `since` useful when you pull the same source every day?
-   - _To do_
+   - Each day only items changed after the last watermark are fetched, so less data, fewer requests and less rate-limit use.
 
 **Done when:** Your function and its tests are your own and you can explain the retry logic.
 
@@ -406,12 +442,25 @@ _To do_
 | Task | Status |
 |---|---|
 | Read `cookbook/00_quickstart/agent_with_tools.py` and `cookbook/02_agents/04_tools/` | To do |
-| Write a `run_sql(query)` tool over your Day 4 data: one SELECT only, refuses anything else, caps rows; connect as a read-only database user you create | To do |
+| Write a `run_sql(query)` tool over your Day 4 data: one SELECT only, refuses anything else, caps rows; connect as a read-only database user you create | Guard written: `day08_sql_guard/sql_guard.py`; tool wiring and read-only DB user still to do |
 | Give it to an agent whose instructions describe `raw_deals`; ask: how many deals are Closed Won? what is the total value of open deals? | To do |
 | Compare with your Day 4 answers; if it counts rows instead of deals, change the instructions or tool description and record what worked | To do |
-| Tests by hand for the guard: a DELETE, two statements in one string, an allowed SELECT | To do |
+| Tests by hand for the guard: a DELETE, two statements in one string, an allowed SELECT | Done: 10 tests pass |
 
 **Demo:** Show the tool calls in the trace, the right answer, and the guard refusing a write.
+
+### Code and results
+
+`day08_sql_guard/sql_guard.py` `check_select(query, max_rows)`: strips one trailing `;`,
+rejects comments and a second statement, requires `SELECT`/`WITH`, rejects write and risky
+keywords (outside string literals), rejects `INTO` and `FOR UPDATE`, and wraps the query as
+`SELECT * FROM (...) LIMIT n` so the cap holds whatever LIMIT the model wrote.
+`test_sql_guard.py`: **10 passed** (DELETE, two statements, data-modifying CTE, `SELECT INTO`,
+comment, UPDATE, empty, an allowed select, keywords inside a string).
+
+Not done: giving the guard to an agent (needs a model key) and the read-only database user
+(needs Postgres). The guard is only layer one; the read-only user is layer two. The project
+has its own guard in `product/egpt_retail/app/sql_guard.py` (sqlglot based) to compare with.
 
 ### What I learned
 
@@ -432,7 +481,7 @@ _To do_
 1. Walk through one tool call: who decides to call it, who runs it, and what does the model see?
    - _To do_
 2. Why a read-only database user as well as your guard?
-   - _To do_
+   - Draft: the guard checks text and a clever query may slip through; the database role enforces "no writes" itself, whatever the text says.
 3. The agent gave a wrong number. How do you find out why?
    - _To do_
 
