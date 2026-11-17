@@ -361,7 +361,7 @@ _To do_
 
 ---
 
-## Day 4: JSON in Postgres, and latest row per key (date)
+## Day 4: JSON in Postgres, and latest row per key (2026-11-17)
 
 ### Checklist
 
@@ -392,9 +392,72 @@ Files in `day04_latest_per_key/`: `deals.ndjson` (12 made-up lines, 4 deals), `q
 The `queries.sql` file has not been run on a real Postgres here (no Postgres in this
 environment); the same logic is checked by the Python reference and by the sqlite test.
 
-### What I learned
+### What I learned (study notes)
 
-_To do, in my own words._
+**JSON vs NDJSON.** Standard JSON wraps all records in one `[ ]` array with commas between
+objects and may be pretty-printed over many lines. NDJSON has no outer brackets and no commas:
+one complete JSON object per line, and an object must stay on one line.
+
+```json
+[ {"deal_id": "D-1001", "price": 1200}, {"deal_id": "D-1002", "price": 5400} ]
+```
+```
+{"deal_id": "D-1001", "price": 1200}
+{"deal_id": "D-1002", "price": 5400}
+```
+
+Why EnterpriseGPT uses NDJSON: a pull just appends lines (no reopening the file to fix the
+closing `]`), and `\copy` or Python can stream millions of lines one at a time without loading
+the whole file into memory. Raw landing tables use a `jsonb` column so a record never fails to
+load even if a field changes.
+
+**`->` vs `->>` and casting.** For `{"deal_id": "D-1001", "price": 1200, "customer": {"name": "Acme"}, "last_modified": "2026-09-05T08:30:00Z"}`:
+
+| Syntax | Returns | Output |
+|---|---|---|
+| `payload -> 'customer'` | jsonb | `{"name": "Acme"}` |
+| `payload -> 'deal_id'` | jsonb | `"D-1001"` (with JSON quotes) |
+| `payload ->> 'deal_id'` | text | `D-1001` |
+| `payload -> 'customer' ->> 'name'` | text | `Acme` |
+| `(payload ->> 'price')::numeric` | numeric | `1200` |
+| `(payload ->> 'last_modified')::timestamptz` | timestamptz | `2026-09-05 08:30:00+00` |
+
+Rules: use `->` for middle steps and `->>` only for the last step (once it is text you cannot
+drill further); put parentheses around `(payload ->> 'key')` before `::` because `::` binds
+tighter than `->>`; a key with a space is fine inside single quotes
+(`payload -> 'customer' -> 'customer name' ->> 'name'`); a missing key gives NULL, not an error.
+`->>` always returns text, so cast it to `numeric` before doing maths and to `timestamptz`
+before sorting by date.
+
+**Latest row per key.** A source sends the same deal again each time it changes, so counting
+rows counts versions, not deals. Think of piles of receipts: `PARTITION BY deal_id` makes one
+pile per deal, `ORDER BY last_modified DESC` puts the newest on top, `ROW_NUMBER()` numbers
+each pile (1 = newest), and `WHERE rn = 1` keeps the top card. `DISTINCT ON (deal_id)` is the
+Postgres-only shortcut for the same thing: sort each deal newest first and keep the first row.
+`ROW_NUMBER` does not collapse rows the way `GROUP BY` does. When one version has several
+lines with the same `last_modified`, use `DENSE_RANK` so all lines of the newest version stay.
+
+### Problems I hit and how I fixed them
+
+| Problem | Cause | Fix | Concept |
+|---|---|---|---|
+| `invalid command \Shruthi` after typing `docker cp ...` | I ran a Windows/Docker command inside the psql prompt (`ai=#`) | `\q` to leave psql, run `docker cp` in PowerShell | Which shell am I in |
+| `docker cp` itself worked: `Successfully copied 1.46kB ... to pgvector:/tmp/deals.ndjson` | n/a | n/a | `\copy` runs inside the container, so the file must be in the container |
+| `ERROR: syntax error at or near "INSERT"` and `raw_deals` had 0 rows | Pasted `\copy` together with the SQL after it; psql ran them as one command (`COPY stage (line) FROM STDIN INSERT INTO ...`) | Run `\copy` alone on its own line, then run the INSERT and the rest | psql meta-commands end at the newline, not at `;` |
+| The tables went into `ai` instead of `day4` | Same mistake as Day 3: not switching with `\c day4` | `\c day4` (lowercase), check the prompt says `day4=#`, clear the leftovers from `ai` with `DROP TABLE IF EXISTS raw_deals, stage;` | psql commands are case-sensitive: `\C` is not `\c` |
+| `CREATE DATABASE day4` said it already exists | It was created in an earlier attempt | Just `\c day4` | Check before creating |
+| `python -m pytest`: "Python was not found" (Microsoft Store shortcut) | The Windows alias is used when no venv is active | Use a venv python or activate one | PATH and App execution aliases |
+| `D:\Shruthi\projects\saturam-agent-framework\.venv\Scripts\python.exe` not recognized | That path does not exist on my machine (Day 1 setup was in another place) | Found `D:\Shruthi\Projects\local-postgres\.venv\Scripts\python.exe` with `Get-ChildItem -Recurse -Filter python.exe` | Finding files, absolute paths |
+| `No module named pip`, then `No module named pytest` in that venv | The venv was created without pip (typical of uv) | `python -m ensurepip --upgrade` then `python -m pip install pytest`, or `uv pip install pytest` | Virtual environments |
+
+### Status at the time of this entry
+
+- Done: `deals.ndjson` copied into the container; concepts studied; the load mistakes above
+  found and understood.
+- Still to do and record here: the load into `raw_deals` in `day4` (`COPY 12`, 12 rows), the five
+  queries with their results (expected 12 and 4; latest stages; values 7800, 9000, 15000, 9600;
+  Closed Won deals 2 vs rows 4), and the pytest run (the venv still needs pytest installed).
+  The checklist rows above keep the status "not yet run on Postgres" until then.
 
 ### 3 surprises
 
