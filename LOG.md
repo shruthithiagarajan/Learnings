@@ -264,19 +264,75 @@ _To do_
 
 ---
 
-## Day 3: PostgreSQL basics (date)
+## Day 3: PostgreSQL basics (2026-11-17)
 
 ### Checklist
 
 | Task | Status |
 |---|---|
 | Read Postgres docs, Tutorial chapters 2 and 3 | To do |
-| Create `deals(deal_id, stage, amount, created_at, brand)` and `dealers(dealer_id, name, region)`, plus a `dealer_id` on deals | To do |
-| Insert 15 to 20 rows by hand, with some NULL amounts and one deal with no dealer | To do |
-| Queries: deals per stage; total amount per brand; deals with no dealer (left join); average amount ignoring NULLs; top 3 brands by amount | To do |
-| Run one query inside a transaction, then ROLLBACK, and show nothing changed | To do |
+| Create `deals(deal_id, stage, amount, created_at, brand)` and `dealers(dealer_id, name, region)`, plus a `dealer_id` on deals | Done (in database `ai`, see problems) |
+| Insert 15 to 20 rows by hand, with some NULL amounts and one deal with no dealer | Done: 3 dealers, 18 deals, 3 NULL amounts, 1 deal with no dealer |
+| Queries: deals per stage; total amount per brand; deals with no dealer (left join); average amount ignoring NULLs; top 3 brands by amount | Done, all five (plus a HAVING query) |
+| Run one query inside a transaction, then ROLLBACK, and show nothing changed | Done: DELETE 7, count 11 inside, 18 after ROLLBACK |
 
 **Demo:** Run each query and explain its result.
+
+### What I did, step by step
+
+Everything in `psql` inside the container (`docker exec -it pgvector psql -U ai -d ai`). The
+full SQL is in `day03_postgres_basics/queries.sql`.
+
+1. **Created the tables.** `dealers(dealer_id PK, name, region)` and
+   `deals(deal_id serial PK, stage, amount numeric, created_at date, brand, dealer_id REFERENCES dealers)`.
+   `amount` and `dealer_id` allow NULL on purpose.
+2. **Inserted the data:** 3 dealers and 18 deals (`INSERT 0 3`, `INSERT 0 18`). Deals 6, 10 and 17
+   have a NULL amount; deal 11 has no dealer.
+3. **Ran the five queries** and the extra HAVING query (results below).
+4. **Transaction:** `BEGIN; DELETE ...; SELECT count(*); ROLLBACK; SELECT count(*);`
+5. **Index:** created an index on `created_at` and ran `EXPLAIN`.
+
+### Queries and results
+
+| Query | Result |
+|---|---|
+| Deals per stage | Quotation 7, Closed Won 6, Negotiation 3, Closed Lost 2 (total 18) |
+| Total amount per brand | Fryer 24100, Oven 20000, Mixer 19300, Grill 9600 |
+| Deals with no dealer (`LEFT JOIN ... WHERE x.dealer_id IS NULL`) | deal 11, Quotation, Fryer |
+| `avg(amount)` vs `avg(COALESCE(amount, 0))` | 4866.67 (15 non-NULL rows) vs 4055.56 (all 18 rows) |
+| Top 3 brands by amount (`LIMIT 3`) | Fryer, Oven, Mixer |
+| Brands with at least 5 deals (`HAVING count(*) >= 5`) | Fryer 5, Oven 5 |
+| Transaction: `DELETE FROM deals WHERE stage = 'Quotation'` | `DELETE 7`, count 11 inside, **18 after `ROLLBACK`** |
+| `EXPLAIN SELECT * FROM deals WHERE created_at >= '2026-09-15'` | `Seq Scan on deals (cost=0.00..1.23 rows=6)`, the index was not used |
+
+### How each result works
+
+- **Deals per stage:** `GROUP BY stage` makes one group per stage and `count(*)` counts the rows
+  in each group. The four counts add up to 18.
+- **Total per brand:** `sum(amount)` adds the amounts in each brand group and skips NULLs. The
+  three NULL-amount deals are Fryer (6), Oven (10) and Grill (17), so those brands add up lower
+  than their row counts suggest.
+- **Left join:** `deals LEFT JOIN dealers` keeps every deal and fills the dealer columns with
+  NULL when no dealer matches. Filtering `WHERE x.dealer_id IS NULL` then leaves only the
+  unmatched deal, 11. An inner join would drop it (17 rows, I did not run this).
+- **Average:** `avg` ignores NULLs, so 73000 / 15 = 4866.67. With `COALESCE(amount, 0)` the NULLs
+  count as zero and the same sum is divided by 18, giving 4055.56. `count(amount)` (15) vs
+  `count(*)` (18) shows the difference.
+- **Top 3:** sort the brand totals descending and `LIMIT 3`. Grill (9600) is cut off.
+- **HAVING:** `WHERE` filters rows before grouping; `HAVING` filters groups after, so it can use
+  `count(*)`.
+- **Transaction:** `BEGIN` starts one unit of work; the delete (7 Quotation rows) is only
+  visible inside it; `ROLLBACK` throws it away, so the count is back to 18. `COMMIT` would have
+  made it permanent.
+- **Index and EXPLAIN:** with 18 rows Postgres reads the whole table (Seq Scan) because that is
+  cheaper than using the index. The index would pay off on a large table.
+
+### Problems I hit
+
+| Problem | Cause | Fix | Concept |
+|---|---|---|---|
+| The tables ended up in the project database `ai`, not in `day3` | I typed `\c` with no database name, so psql reconnected to the same database (`You are now connected to database "ai"`) | Use `\c day3`. To clean up `ai`: `DROP TABLE deals, dealers;` there and rerun `queries.sql` | psql meta-commands, database vs table |
+| The pasted multi-line INSERT looked garbled in the terminal | Terminal paste echo | Result was still correct (`INSERT 0 18`, counts match) | Always check the row count after an insert |
 
 ### What I learned
 
@@ -295,11 +351,11 @@ _To do_
 ### Explain back (answer in my own words)
 
 1. Why does the left join return the deal without a dealer, and the inner join does not?
-   - _To do_
+   - A left join keeps every row of the left table (`deals`) and fills the right table's columns with NULL when nothing matches, so deal 11 appears. An inner join keeps only rows with a match on both sides, and `NULL = anything` is never true, so deal 11 is dropped.
 2. How does AVG treat NULL? How would you count NULLs as zero instead?
-   - _To do_
+   - `avg` ignores NULLs: it divided by 15, not 18, giving 4866.67. `avg(COALESCE(amount, 0))` counts them as zero and gave 4055.56.
 3. What would an index on `created_at` help with?
-   - _To do_
+   - Queries that filter or sort by date, like `WHERE created_at >= ...` or date ranges: Postgres can jump to matching rows instead of reading the whole table. My `EXPLAIN` still showed a Seq Scan because the table has only 18 rows. It does not help other columns and slows inserts slightly.
 
 **Done when:** Every query is written by you and explained.
 
